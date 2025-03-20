@@ -1,0 +1,47 @@
+import boto3
+import json
+import sys
+
+ec2 = boto3.client('ec2')
+sns = boto3.client('sns')
+
+def lambda_handler(event, context):
+    # Running Instances list
+    running_instances = []
+
+    # Describing the running instances
+    instance_status = ec2.describe_instances(
+        Filters=[
+            {
+                "Name": "instance-state-name",
+                "Values": ["running"]
+            }
+        ]
+    )
+    for reservation in instance_status['Reservations']:
+        for instance in reservation['Instances']:
+            instance_ids = str(instance['InstanceId'])
+            running_instances.append(instance_ids)
+
+    print(running_instances)
+    termination_protection_status_list = []
+
+    # Checks if instance termination protection is enabled for running instances
+    for instance_id in running_instances[:]:
+        termination_protection_status = ec2.describe_instance_attribute(
+            InstanceId=instance_id,
+            Attribute='disableApiTermination'
+        )
+        if termination_protection_status['DisableApiTermination']['Value'] == False:
+            termination_protection_status_list.append(instance_id)
+
+    # Exit the code if termination protection enabled for all instances
+    if len(termination_protection_status_list) == 0:
+        sys.exit()
+
+    # Email Instance Id's if disableApiTermination is False
+    sns_email = sns.publish(
+        TopicArn= " ", # Provide your SNS Topic ARN Here
+        Message=f"Hello Team,\\n\\nTermination Protection is not enabled for \\n\\n{termination_protection_status_list}\\nPlease do the needful actions\\n\\nThanks,\\nSecurity Team",
+        Subject='Compliance Alert - Enable Termination Protection'
+    )
